@@ -41,10 +41,105 @@ function install() {
 register_activation_hook(__FILE__, 'install');
 
 function uninstall() {
+    
 }
 
 register_uninstall_hook(__FILE__, 'uninstall');
 
-if ( is_admin() )
+if ( is_admin() ) {
 	require_once dirname( __FILE__ ) . '/admin.php';
+}
+
+function s3_update_attachment($attachment_id) {          
+    $attachment_path = get_attached_file($attachment_id); // Gets path to attachment
+    $upload_dir = wp_upload_dir();
+    $s3_path = str_replace($upload_dir['basedir'], '', $attachment_path);
+    if (substr($s3_path, 0, 1) == DIRECTORY_SEPARATOR) {
+        $s3_path = substr($s3_path, 1);
+    }
+    $settings = json_decode(get_option('S3MS_settings'), true);
+    if (isset($settings['valid']) && (int) $settings['valid']) {
+        if (!class_exists('S3')) {
+            require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'S3.php';
+        }
+        
+        $s3 = new S3($settings['s3_access_key'], $settings['s3_secret_key']);
+        $ssl = (int) $settings['s3_ssl'];
+        $s3->setSSL((bool) $ssl);
+        $s3->setExceptions(true);
+        
+        $meta_headers = array();
+        // Allow for far reaching expires
+        $request_headers = array();
+        if (trim($settings['s3_expires']) != '') {
+            $request_headers = array(
+                "Cache-Control" => "max-age=315360000",
+                "Expires" => gmdate("D, d M Y H:i:s T", strtotime(trim($settings['s3_expires'])))
+            );
+        }
+
+        try {
+            $s3->putObjectFile($attachment_path, $settings['s3_bucket'], $s3_path, S3::ACL_PUBLIC_READ, $meta_headers, $request_headers);
+            update_post_meta($attachment_id, "S3MS_bucket", $settings['s3_bucket']);
+            update_post_meta($attachment_id, "S3MS_file", $s3_path);
+            update_post_meta($attachment_id, "S3MS_cloudfront", null);
+            @unlink($attachment_path);
+        } catch (Exception $e) {
+            echo $e->getMessage();
+            die();
+        }
+    }
+}
+
+add_action("add_attachment", 's3_update_attachment');
+add_action("edit_attachment", 's3_update_attachment');
+
+function s3_attachment_url($url, $post_id) {
+    $upload_dir = wp_upload_dir();
+    $file = str_replace($upload_dir['url'], $upload_dir['subdir'], $url);
+    if (substr($file, 0, 1) == DIRECTORY_SEPARATOR) {
+        $file = substr($file, 1);
+    }
+    
+    $bucket = get_post_meta($post_id, 'S3MS_bucket', true);
+    // $file = get_post_meta($post_id, 'S3MS_file', true);
+    $cloudfount = get_post_meta($post_id, 'S3MS_cloudfront', true);
+    $settings = json_decode(get_option('S3MS_settings'), true);
+    
+    // Determine protocol to serve from
+    if ($settings['s3_protocol'] == 'http') {
+        $protocol = 'http://';
+    } elseif ($settings['s3_protocol'] == 'https') {
+        $protocol = 'https://';
+    } elseif ($settings['s3_protocol'] == 'relative') {
+        $protocol = 'http://';
+        if (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] === '443') {
+            $protocol = 'https://';
+        }
+    } else {
+        $protocol = 'https://';
+    }
+    
+    // Should serve with respective protocol
+    if ($cloudfront) {
+        
+    } else {
+        $url = $protocol . $bucket . '.s3.amazonaws.com/' . $file;
+    }
+    return $url;
+}
+
+add_action("wp_get_attachment_url", 's3_attachment_url', 9, 2);
+add_action("wp_get_attachment_thumb_url", 's3_attachment_url', 9, 2);
+
+/*
+get_attached_file
+update_attached_file
+wp_get_attachment_thumb_url
+wp_get_attachment_thumb_file
+wp_get_attachment_url
+delete_attachment
+wp_delete_attachment
+get_attached_media
+*/
     

@@ -54,6 +54,11 @@ function S3MSAdminContent() {
                 's3_access_key' => trim($_POST['s3_access_key']),
                 's3_secret_key' => trim($_POST['s3_secret_key']),
                 's3_ssl' => isset($_POST['s3_ssl']) ? 1 : 0,
+                's3_delete' => isset($_POST['s3_delete']) ? 1 : 0,
+                's3_expires' => trim($_POST['s3_expires']),
+                's3_cloudfront' => trim($_POST['s3_cloudfront']),
+                's3_protocol' => in_array(trim($_POST['s3_protocol']), array('http','https','relative')) ? trim($_POST['s3_protocol']) : 'relative',
+                'valid' => 1,
             );
             
             $settings = json_encode($settings);
@@ -86,6 +91,26 @@ function S3MSAdminContent() {
     $s3_ssl = isset($_POST['s3_ssl']) ? (int) $_POST['s3_ssl'] : null;
     if (!$s3_ssl && is_array($settings) && isset($settings['s3_ssl'])) {
         $s3_ssl = (int) $settings['s3_ssl'];
+    }
+    
+    $s3_delete = isset($_POST['s3_delete']) ? (int) $_POST['s3_delete'] : null;
+    if (!$s3_delete && is_array($settings) && isset($settings['s3_delete'])) {
+        $s3_delete = (int) $settings['s3_delete'];
+    }
+    
+    $s3_expires = isset($_POST['s3_expires']) ? trim($_POST['s3_expires']) : null;
+    if (!$s3_expires && is_array($settings) && isset($settings['s3_expires'])) {
+        $s3_expires = $settings['s3_expires'];
+    }
+    
+    $s3_cloudfront = isset($_POST['s3_cloudfront']) ? trim($_POST['s3_cloudfront']) : null;
+    if (!$s3_cloudfront && is_array($settings) && isset($settings['s3_cloudfront'])) {
+        $s3_cloudfront = $settings['s3_cloudfront'];
+    }
+    
+    $s3_protocol = isset($_POST['s3_protocol']) ? trim($_POST['s3_protocol']) : null;
+    if (!$s3_protocol && is_array($settings) && isset($settings['s3_protocol'])) {
+        $s3_protocol = $settings['s3_protocol'];
     }
 ?>
 <div class="wrap">
@@ -122,6 +147,34 @@ function S3MSAdminContent() {
                             <td>
                                 <input type="checkbox" name="s3_ssl" value="1" <?php echo ($s3_ssl) ? 'checked="checked"' : '';?>/>
                                 <p class="description">Encrypt traffic for data sent to S3?</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="key"><?php _e("Delete from S3:", 'S3MS' ); ?></label></th>
+                            <td>
+                                <input type="checkbox" name="s3_delete" value="1" <?php echo ($s3_delete) ? 'checked="checked"' : '';?>/>
+                                <p class="description">Deleting from Media Library deletes from S3? (May not wish to for cost reasons)</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="key"><?php _e("Expires:", 'S3MS' ); ?></label></th>
+                            <td>
+                                <input style="width:400px;" type="text" name="s3_expires" value="<?php echo $s3_expires;?>" placeholder="Enter expires format"/>
+                                <p class="description">To set far reaching expires for assets, enter it in a <a href="http://us1.php.net/manual/en/datetime.formats.php" target="_blank">valid strtotime format</a> e.g. +15 years</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="key"><?php _e("Cloudfront:", 'S3MS' ); ?></label></th>
+                            <td>
+                                <input style="width:400px;" type="text" name="s3_cloudfront" value="<?php echo $s3_cloudfront;?>" placeholder="Enter Cloudfront"/>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="key"><?php _e("Protocol:", 'S3MS' ); ?></label></th>
+                            <td>
+                                <input type="radio" name="s3_protocol" value="http" <?php echo ($s3_protocol == 'http') ? 'checked="checked"' : '';?>/> Always serve from HTTP.<br/>
+                                <input type="radio" name="s3_protocol" value="https" <?php echo ($s3_protocol == 'https') ? 'checked="checked"' : '';?>/> Always serve from HTTPS.<br/>
+                                <input type="radio" name="s3_protocol" value="relative" <?php echo ($s3_protocol == 'relative') ? 'checked="checked"' : '';?>/> Serve from same protocol as requested page.<br/>
                             </td>
                         </tr>
                     </tbody>
