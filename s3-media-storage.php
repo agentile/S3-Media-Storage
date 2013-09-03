@@ -36,6 +36,7 @@ define('S3MS_PLUGIN_VERSION', '0.9');
 define('S3MS_PLUGIN_URL', plugin_dir_url( __FILE__ ));
 
 function install() {
+
 }
 
 register_activation_hook(__FILE__, 'install');
@@ -47,7 +48,7 @@ function uninstall() {
 register_uninstall_hook(__FILE__, 'uninstall');
 
 if ( is_admin() ) {
-	require_once dirname( __FILE__ ) . '/admin.php';
+	require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'admin.php';
 }
 
 function s3_update_attachment($attachment_id) {          
@@ -85,23 +86,28 @@ function s3_update_attachment($attachment_id) {
             update_post_meta($attachment_id, "S3MS_cloudfront", null);
             @unlink($attachment_path);
         } catch (Exception $e) {
-            echo $e->getMessage();
-            die();
+            //echo $e->getMessage();
+            //die();
+            return false;
         }
     }
 }
 
-add_action("add_attachment", 's3_update_attachment');
-add_action("edit_attachment", 's3_update_attachment');
-
-function s3_attachment_url($url, $post_id) {
+function s3_attachment_url($url, $post_id) {    
+    $bucket = get_post_meta($post_id, 'S3MS_bucket', true);
+    
+    // Was this a file we even uploaded to S3? If not bail.
+    if (!$bucket || trim($bucket) == '') {
+        return $url;
+    }
+    
     $upload_dir = wp_upload_dir();
-    $file = str_replace($upload_dir['url'], $upload_dir['subdir'], $url);
+
+    $file = str_replace($upload_dir['baseurl'], '', $url);
     if (substr($file, 0, 1) == DIRECTORY_SEPARATOR) {
         $file = substr($file, 1);
     }
     
-    $bucket = get_post_meta($post_id, 'S3MS_bucket', true);
     // $file = get_post_meta($post_id, 'S3MS_file', true);
     $cloudfount = get_post_meta($post_id, 'S3MS_cloudfront', true);
     $settings = json_decode(get_option('S3MS_settings'), true);
@@ -129,17 +135,47 @@ function s3_attachment_url($url, $post_id) {
     return $url;
 }
 
+
+function s3_delete_attachment($url) { 
+    $settings = json_decode(get_option('S3MS_settings'), true);
+
+    // Check our settings to see if we even want to delete from S3.
+    if (!isset($settings['s3_delete']) || (int) $settings['s3_delete'] == 0) {
+        return true;
+    }
+    
+    $upload_dir = wp_upload_dir();
+    $file = str_replace($upload_dir['basedir'], '', $url);
+    if (substr($file, 0, 1) == DIRECTORY_SEPARATOR) {
+        $file = substr($file, 1);
+    }
+    
+    if (isset($settings['valid']) && (int) $settings['valid']) {
+        if (!class_exists('S3')) {
+            require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'S3.php';
+        }
+        
+        $s3 = new S3($settings['s3_access_key'], $settings['s3_secret_key']);
+        $ssl = (int) $settings['s3_ssl'];
+        $s3->setSSL((bool) $ssl);
+        $s3->setExceptions(true);
+
+        try {
+            $s3->deleteObject($settings['s3_bucket'], $file);
+            return true;
+        } catch (Exception $e) {
+            //echo $e->getMessage();
+            //die();
+        }
+    }
+}   
+
+/**
+ * Register hooks
+ */
 add_action("wp_get_attachment_url", 's3_attachment_url', 9, 2);
 add_action("wp_get_attachment_thumb_url", 's3_attachment_url', 9, 2);
-
-/*
-get_attached_file
-update_attached_file
-wp_get_attachment_thumb_url
-wp_get_attachment_thumb_file
-wp_get_attachment_url
-delete_attachment
-wp_delete_attachment
-get_attached_media
-*/
+add_action("add_attachment", 's3_update_attachment');
+add_action("edit_attachment", 's3_update_attachment');
+add_action("wp_delete_file", "s3_delete_attachment");
     
