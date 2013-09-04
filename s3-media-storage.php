@@ -67,7 +67,7 @@ function s3_attachment_url($url, $post_id) {
     }
     
     // $file = get_post_meta($post_id, 'S3MS_file', true);
-    $cloudfount = get_post_meta($post_id, 'S3MS_cloudfront', true);
+    $cloudfront = get_post_meta($post_id, 'S3MS_cloudfront', true);
     $settings = json_decode(get_option('S3MS_settings'), true);
     
     // Determine protocol to serve from
@@ -85,8 +85,8 @@ function s3_attachment_url($url, $post_id) {
     }
     
     // Should serve with respective protocol
-    if ($cloudfront) {
-        
+    if ($cloudfront && trim($cloudfront) != '') {
+        $url = $protocol . $cloudfront . '/' . $file;
     } else {
         $url = $protocol . $bucket . '.s3.amazonaws.com/' . $file;
     }
@@ -197,9 +197,11 @@ function s3_update_attachment_metadata($data, $attachment_id) {
 
         try {
             $s3->putObjectFile($attachment_path, $settings['s3_bucket'], $s3_path, S3::ACL_PUBLIC_READ, $meta_headers, $request_headers);
+            // We store per file instead of always just referencing the settings, as if settings change we don't want to break previously
+            // uploaded files that refer to different buckets/cloudfront/etc.
             update_post_meta($attachment_id, "S3MS_bucket", $settings['s3_bucket']);
             update_post_meta($attachment_id, "S3MS_file", $s3_path);
-            update_post_meta($attachment_id, "S3MS_cloudfront", null);
+            update_post_meta($attachment_id, "S3MS_cloudfront", $settings['s3_cloudfront']);
             @unlink($attachment_path);
         } catch (Exception $e) {
             //echo $e->getMessage();

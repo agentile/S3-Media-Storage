@@ -164,9 +164,10 @@ function S3MSAdminContent() {
                             </td>
                         </tr>
                         <tr>
-                            <th><label for="key"><?php _e("Cloudfront:", 'S3MS' ); ?></label></th>
+                            <th><label for="key"><?php _e("CloudFront Domain Name:", 'S3MS' ); ?></label></th>
                             <td>
-                                <input style="width:400px;" type="text" name="s3_cloudfront" value="<?php echo $s3_cloudfront;?>" placeholder="Enter Cloudfront"/>
+                                <input style="width:400px;" type="text" name="s3_cloudfront" value="<?php echo $s3_cloudfront;?>" placeholder="Enter CloudFront Domain Name"/>
+                                <p class="description">e.g. abcslfn3kg17h.cloudfront.net</p>
                             </td>
                         </tr>
                         <tr>

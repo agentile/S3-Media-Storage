@@ -20,6 +20,7 @@ uploaded file all in the same request.
 * Send files to S3 using SSL
 * Serve files from HTTP/HTTPS/according to page requested protocol
 * Set far reaching expires for your assets
+* Amazon CloudFront support
 * Deleting from S3 is optional (price concern for some)
 * No additional database tables needed
 
@@ -34,4 +35,3 @@ Upload the S3 Media Storage plugin to your blog, activate it, then enter your S3
 
 == ToDo ==
 * Allow for moving existing assets to S3 that were present before plugin installation.
-* Setup up cloudfront settings/URLs
