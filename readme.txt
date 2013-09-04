@@ -21,6 +21,7 @@ uploaded file all in the same request.
 * Serve files from HTTP/HTTPS/according to page requested protocol
 * Set far reaching expires for your assets
 * Deleting from S3 is optional (price concern for some)
+* No additional database tables needed
 
 == Installation ==
 
