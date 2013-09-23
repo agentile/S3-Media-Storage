@@ -52,7 +52,9 @@ if ( is_admin() ) {
 }
 
 function s3_attachment_url($url, $post_id) {
-    $bucket = get_post_meta($post_id, 'S3MS_bucket', true);
+    $custom_fields = get_post_custom($post_id);
+    
+    $bucket = isset($custom_fields['S3MS_bucket']) ? $custom_fields['S3MS_bucket'][0] : null;
     
     // Was this a file we even uploaded to S3? If not bail.
     if (!$bucket || trim($bucket) == '') {
@@ -66,8 +68,8 @@ function s3_attachment_url($url, $post_id) {
         $file = substr($file, 1);
     }
     
-    // $file = get_post_meta($post_id, 'S3MS_file', true);
-    $cloudfront = get_post_meta($post_id, 'S3MS_cloudfront', true);
+    // $file = isset($custom_fields['S3MS_file']) ? $custom_fields['S3MS_file'][0] : null;
+    $cloudfront = isset($custom_fields['S3MS_cloudfront']) ? $custom_fields['S3MS_cloudfront'][0] : null;
     $settings = json_decode(get_option('S3MS_settings'), true);
     
     // Determine protocol to serve from
@@ -158,7 +160,9 @@ function s3_image_make_intermediate_size($attachment_path) {
 
         try {
             $s3->putObjectFile($attachment_path, $settings['s3_bucket'], $s3_path, S3::ACL_PUBLIC_READ, $meta_headers, $request_headers);
-            @unlink($attachment_path);
+            if (isset($settings['s3_delete_local']) && $settings['s3_delete_local']) {
+                @unlink($attachment_path);
+            } 
         } catch (Exception $e) {
             //echo $e->getMessage();
             //die();
@@ -202,7 +206,25 @@ function s3_update_attachment_metadata($data, $attachment_id) {
             update_post_meta($attachment_id, "S3MS_bucket", $settings['s3_bucket']);
             update_post_meta($attachment_id, "S3MS_file", $s3_path);
             update_post_meta($attachment_id, "S3MS_cloudfront", $settings['s3_cloudfront']);
-            @unlink($attachment_path);
+            if ((isset($data['S3MS_move']) && $data['S3MS_move']) || (isset($settings['s3_delete_local']) && $settings['s3_delete_local'])) {
+                @unlink($attachment_path);
+            }
+            
+            // If we are copy or moving we need to grab any thumbnails as well.
+            if (isset($data['S3MS_move'])) {
+                $c = wp_get_attachment_metadata($attachment_id);
+                if (isset($c['sizes']) && is_array($c['sizes'])) {
+                    foreach ($c['sizes'] as $size) {
+                        // Do a cheap check for - and x to know that we are talking about a resized image
+                        // e.g. Photo0537.jpg turns into Photo0537-150x150.jpg
+                        if (isset($size['file']) && strpos($size['file'], '-') && strpos($size['file'], 'x')) {
+                            $parts = pathinfo($attachment_path);
+                            $new_attachment_path = $parts['dirname'] . DIRECTORY_SEPARATOR . $size['file'];
+                            s3_image_make_intermediate_size($new_attachment_path);
+                        }
+                    }
+                }
+            }
         } catch (Exception $e) {
             //echo $e->getMessage();
             //die();

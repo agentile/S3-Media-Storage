@@ -9,7 +9,7 @@ function S3MSAdminMenu() {
 add_action('admin_menu', 'S3MSAdminMenu');
 
 function S3MSAdminContent() {    
-    if ($_POST['submit']) {
+    if (isset($_POST['submit'])) {
         $errors = array();
         
         if (!isset($_POST['s3_bucket']) || trim($_POST['s3_bucket']) == '') {
@@ -54,6 +54,7 @@ function S3MSAdminContent() {
                 's3_access_key' => trim($_POST['s3_access_key']),
                 's3_secret_key' => trim($_POST['s3_secret_key']),
                 's3_ssl' => isset($_POST['s3_ssl']) ? 1 : 0,
+                's3_delete_local' => isset($_POST['s3_delete_local']) ? 1 : 0,
                 's3_delete' => isset($_POST['s3_delete']) ? 1 : 0,
                 's3_expires' => trim($_POST['s3_expires']),
                 's3_cloudfront' => trim($_POST['s3_cloudfront']),
@@ -67,6 +68,31 @@ function S3MSAdminContent() {
             ?>
             <div class="updated"><p><strong><?php _e('Settings Saved!', 'S3MS' ); ?></strong></p></div>
             <?php
+        }
+    }
+    
+    if (isset($_POST['move_files']) || isset($_POST['copy_files'])) {
+        $move = isset($_POST['move_files']) ? true : false;
+        $label = isset($_POST['move_files']) ? 'Moved' : 'Copied';
+        if (isset($_POST['selected']) && is_array($_POST['selected'])) {
+            $success_count = 0;
+            $error_count = 0;
+            foreach ($_POST['selected'] as $id) {
+                $ret = s3_update_attachment_metadata(array('S3MS_move' => $move), $id);
+                if ($ret) {
+                    $success_count++;
+                } else {
+                    $error_count++;
+                }
+            }
+            ?>
+            <div class="updated"><p><strong><?php _e(number_format($success_count) . ' File(s) '.$label.'!', 'S3MS' ); ?></strong></p></div>
+            <?php
+            if ($error_count > 0) {
+                ?>
+                <div class="error"><p><strong><?php _e(number_format($error_count) . ' File(s) Could Not Be '.$label.'!', 'S3MS' ); ?></strong></p></div>
+                <?php
+            }
         }
     }
     
@@ -91,6 +117,11 @@ function S3MSAdminContent() {
     $s3_ssl = isset($_POST['s3_ssl']) ? (int) $_POST['s3_ssl'] : null;
     if (!$s3_ssl && is_array($settings) && isset($settings['s3_ssl'])) {
         $s3_ssl = (int) $settings['s3_ssl'];
+    }
+    
+    $s3_delete_local = isset($_POST['s3_delete_local']) ? (int) $_POST['s3_delete_local'] : null;
+    if (!$s3_delete_local && is_array($settings) && isset($settings['s3_delete_local'])) {
+        $s3_delete_local = (int) $settings['s3_delete_local'];
     }
     
     $s3_delete = isset($_POST['s3_delete']) ? (int) $_POST['s3_delete'] : null;
@@ -150,6 +181,13 @@ function S3MSAdminContent() {
                             </td>
                         </tr>
                         <tr>
+                            <th><label for="key"><?php _e("Delete Local Files:", 'S3MS' ); ?></label></th>
+                            <td>
+                                <input type="checkbox" name="s3_delete_local" value="1" <?php echo ($s3_delete_local) ? 'checked="checked"' : '';?>/>
+                                <p class="description">Whether or not to keep files uploaded locally</p>
+                            </td>
+                        </tr>
+                        <tr>
                             <th><label for="key"><?php _e("Delete from S3:", 'S3MS' ); ?></label></th>
                             <td>
                                 <input type="checkbox" name="s3_delete" value="1" <?php echo ($s3_delete) ? 'checked="checked"' : '';?>/>
@@ -188,5 +226,71 @@ function S3MSAdminContent() {
             </div>
         </div>
 	</div>
+
+    <div id="poststuff">
+		<div class="postbox">
+		<h3><?php _e('Library Files'); ?></h3>
+            <div class="inside">
+            <form id="S3MS-transfer" method="post" action="" enctype="multipart/form-data">
+                <input type="hidden" name="transfer" value="1"/>
+                <?php
+                // While we could use get_posts and get_post_meta instead of a custom query, it would mean more queries/data than necessary
+                // So lets just do our own query.
+                global $wpdb;
+                $sql = "SELECT ID, guid, meta_key, meta_value
+                        FROM {$wpdb->posts}
+                        LEFT JOIN {$wpdb->postmeta} ON {$wpdb->postmeta}.post_id = {$wpdb->posts}.ID AND {$wpdb->postmeta}.meta_key = 'S3MS_file'
+                        WHERE 1=1 
+                            AND {$wpdb->posts}.post_type = 'attachment' 
+                            AND ({$wpdb->posts}.post_status = 'inherit') 
+                        ORDER BY {$wpdb->posts}.post_date DESC";
+                $files = $wpdb->get_results($sql);
+                ?>
+                <table class="wp-list-table widefat">
+                    <thead>
+                        <tr>
+                            <th scope="col">Select All<input type="checkbox" id="select-all"/></span></th>
+                            <th scope="col">Local File</span></th>
+                            <th scope="col">Exists Locally?</th>
+                            <th scope="col">S3 File</span></th>
+                            <th scope="col">Exists On S3?</span></th>
+                        </tr>
+                    </thead>
+                    <tfoot>
+                        <tr>
+                            <th colspan="5" scope="row">Total: <?php echo number_format(count($files));?> Files</th>
+                        </tr>
+                    </tfoot>
+                    <tbody>
+                        <?php $ud = wp_upload_dir();?>
+                        <?php foreach ($files as $file):?>
+                        <tr>
+                            <td><input type="checkbox" class="files" name="selected[]" value="<?php echo $file->ID;?>"/></td>
+                            <td><?php echo '<a href="'.$file->guid.'" target="_blank">'.$file->guid.'</a>';?></td>
+                            <td><?php echo file_exists(str_replace($ud['baseurl'], $ud['basedir'], $file->guid)) ? '&#10003;' : '';?></td>
+                            <td><?php $s3_url = s3_attachment_url($file->guid, $file->ID); echo $s3_url == $file->guid ? '' : '<a href="'.$s3_url.'" target="_blank">'.$s3_url.'</a>';?></td>
+                            <td><?php echo $file->meta_value ? '&#10003;' : '';?></td>
+                        </tr>
+                        <?php endforeach;?>
+                    </tbody>
+                </table>
+                
+                <p class="submit">
+                    <input type="submit" name="copy_files" class="button button-primary" value="<?php _e('Copy Files To S3');?>"> <input type="submit" name="move_files" class="button button-primary" value="<?php _e('Move Files To S3');?>">
+                </p>
+            </form>
+            </div>
+        </div>
+	</div>
+</div>
+<script>
+jQuery('#select-all').click(function(e) {
+    if (jQuery(this).attr('checked') == 'checked') {
+        jQuery(':input[type=checkbox].files').attr('checked', 'checked');
+    } else {
+        jQuery(':input[type=checkbox].files').attr('checked', null);
+    }
+});
+</script>
 <?php
 }
