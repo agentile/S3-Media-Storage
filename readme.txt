@@ -30,6 +30,9 @@ Upload the S3 Media Storage plugin to your blog, activate it, then enter your S3
 
 == Changelog ==
 
+= 1.0.2 =
+* Add pagination for admin assets listing
+
 = 1.0.1 =
 * Allow for custom bucket paths
 

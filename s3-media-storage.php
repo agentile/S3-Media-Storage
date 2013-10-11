@@ -5,7 +5,7 @@
 /*
 Plugin Name: S3 Media Storage
 Description: Store media library contents onto S3 directly without the need for temporarily storing files on the filesystem/cron jobs. This is more ideal for multiple web server environemnts.
-Version: 1.0.1
+Version: 1.0.2
 Author: Anthony Gentile
 Author URI: http://agentile.com
 */
@@ -256,6 +256,89 @@ function s3_update_attachment_metadata($data, $attachment_id) {
         }
     }
     return $data;
+}
+
+function s3ms_pagination_url() {
+    parse_str($_SERVER['QUERY_STRING'], $out);
+    unset($out['s3ms_page']);
+    $out = http_build_query($out);
+    if ($out) {
+        return '?' . $out . '&s3ms_page=';
+    }
+    return '?s3ms_page=';
+}
+
+function s3ms_pagination($total, $per_page, $page, $page_action, $group = 10, $offset = 0, $classes = array()) {
+    if ($total <= $per_page) {
+        return;
+    }
+
+    $classes = implode(' ', $classes);
+    $str = '';
+
+    $start = floor($page / $group) * $group;
+
+    $total_pages = ceil($total / $per_page);
+
+    if ($start == 0) {
+        $start = 1;
+    }
+
+    // do some adjustment if someone is nearing the
+    // end of the group, shift the stack back
+    $end_of_group = ($start + $group) - 1;
+    if ($end_of_group > $total_pages) {
+        $end_of_group = $total_pages;
+    }
+
+    if ($page == $end_of_group && $page != $total_pages) {
+        $start = $end_of_group;
+        $end_of_group = ($start + $group) - 1;
+    } elseif ($page > ($end_of_group - 2) && $end_of_group < $total_pages) {
+        $start += 1;
+        $end_of_group = ($start + $group) - 1;
+    }
+
+    if ($page == 1) {
+        $prev = 1 - $offset;
+    } elseif ($page == 0) {
+        $prev = 0;
+    } else {
+        $prev = $page - 1;
+    }
+
+    if ($page + 1 > ($total_pages - $offset)) {
+        $next = ($total_pages - $offset);
+    } else {
+        $next = $page + 1;
+    }
+
+    if ($next == 0) {
+        $next = 1;
+    }
+
+    $end = $total_pages - $offset;
+    if ($end == 0) {
+        $end = 1;
+    }
+
+    $str .= '<a href="' . $page_action . (1 - $offset) . '">Start</a>&nbsp;';
+    $str .= '<a href="' . $page_action . $prev . '">Prev</a>&nbsp;';
+
+    for ($i = $start; $i <= $end_of_group; $i++) {
+        if ($i > $total_pages) {
+            break;
+        }
+        if (($i - $offset) == $page) {
+            $str .= '&nbsp;<a href="#">' . $i . '</a>&nbsp;';
+        } else {
+            $str .= '&nbsp;<a href="' . $page_action . ($i - $offset). '">' . $i . '</a>&nbsp;';
+        }
+    }
+    $str .= '&nbsp;<a href="' . $page_action . $next . '">Next</a>&nbsp;';
+    $str .= '&nbsp;<a href="' . $page_action . $end . '">End</a>&nbsp;';
+
+    return $str;
 }
 
 /**

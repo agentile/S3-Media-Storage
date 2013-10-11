@@ -250,13 +250,30 @@ function S3MSAdminContent() {
                 // While we could use get_posts and get_post_meta instead of a custom query, it would mean more queries/data than necessary
                 // So lets just do our own query.
                 global $wpdb;
+                $page = isset($_GET['s3ms_page']) ? (int) $_GET['s3ms_page'] : 1;
+                $limit = 100;
+                $offset = ($limit * $page) - $limit;
+                
+                $sql = "SELECT COUNT(1) as count
+                        FROM {$wpdb->posts}
+                        LEFT JOIN {$wpdb->postmeta} ON {$wpdb->postmeta}.post_id = {$wpdb->posts}.ID AND {$wpdb->postmeta}.meta_key = 'S3MS_file'
+                        WHERE 1=1 
+                            AND {$wpdb->posts}.post_type = 'attachment' 
+                            AND ({$wpdb->posts}.post_status = 'inherit')";
+                $r = $wpdb->get_row($sql);
+                $total = $r->count;
+                
+                $page_action = s3ms_pagination_url();
+                $pages = ceil($total / $limit);
+                
                 $sql = "SELECT ID, guid, meta_key, meta_value
                         FROM {$wpdb->posts}
                         LEFT JOIN {$wpdb->postmeta} ON {$wpdb->postmeta}.post_id = {$wpdb->posts}.ID AND {$wpdb->postmeta}.meta_key = 'S3MS_file'
                         WHERE 1=1 
                             AND {$wpdb->posts}.post_type = 'attachment' 
                             AND ({$wpdb->posts}.post_status = 'inherit') 
-                        ORDER BY {$wpdb->posts}.post_date DESC";
+                        ORDER BY {$wpdb->posts}.post_date DESC
+                        LIMIT $offset,$limit";
                 $files = $wpdb->get_results($sql);
                 ?>
                 <table class="wp-list-table widefat">
@@ -271,7 +288,7 @@ function S3MSAdminContent() {
                     </thead>
                     <tfoot>
                         <tr>
-                            <th colspan="5" scope="row">Total: <?php echo number_format(count($files));?> Files</th>
+                            <th colspan="5" scope="row"><p style="float:left"><?php echo s3ms_pagination($total, $limit, $page, $page_action);?></p>&nbsp;<p style="float:right">Page <?php echo number_format($page);?> of <?php echo number_format($pages);?> Total: <?php echo number_format($total);?> Files</p></th>
                         </tr>
                     </tfoot>
                     <tbody>
