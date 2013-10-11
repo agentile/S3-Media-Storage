@@ -35,17 +35,17 @@ if ( !function_exists( 'add_action' ) ) {
 define('S3MS_PLUGIN_VERSION', '0.9');
 define('S3MS_PLUGIN_URL', plugin_dir_url( __FILE__ ));
 
-function install() {
+function s3ms_install() {
 
 }
 
-register_activation_hook(__FILE__, 'install');
+register_activation_hook(__FILE__, 's3ms_install');
 
-function uninstall() {
+function s3ms_uninstall() {
     
 }
 
-register_uninstall_hook(__FILE__, 'uninstall');
+register_uninstall_hook(__FILE__, 's3ms_uninstall');
 
 if ( is_admin() ) {
 	require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'admin.php';
