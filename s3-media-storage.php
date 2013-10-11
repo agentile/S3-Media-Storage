@@ -5,7 +5,7 @@
 /*
 Plugin Name: S3 Media Storage
 Description: Store media library contents onto S3 directly without the need for temporarily storing files on the filesystem/cron jobs. This is more ideal for multiple web server environemnts.
-Version: 0.9
+Version: 1.0.1
 Author: Anthony Gentile
 Author URI: http://agentile.com
 */
