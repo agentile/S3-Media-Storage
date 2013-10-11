@@ -55,6 +55,7 @@ function s3_attachment_url($url, $post_id) {
     $custom_fields = get_post_custom($post_id);
     
     $bucket = isset($custom_fields['S3MS_bucket']) ? $custom_fields['S3MS_bucket'][0] : null;
+    $bucket_path = isset($custom_fields['S3MS_bucket_path']) ? $custom_fields['S3MS_bucket_path'][0] : null;
     
     // Was this a file we even uploaded to S3? If not bail.
     if (!$bucket || trim($bucket) == '') {
@@ -88,9 +89,17 @@ function s3_attachment_url($url, $post_id) {
     
     // Should serve with respective protocol
     if ($cloudfront && trim($cloudfront) != '') {
-        $url = $protocol . $cloudfront . '/' . $file;
+        if ($bucket_path) {
+            $url = $protocol . $cloudfront . '/' . $bucket_path . '/' . $file;
+        } else {
+            $url = $protocol . $cloudfront . '/' . $file;
+        }
     } else {
-        $url = $protocol . $bucket . '.s3.amazonaws.com/' . $file;
+        if ($bucket_path) {
+            $url = $protocol . $bucket . '.s3.amazonaws.com/' . $bucket_path . '/' . $file;
+        } else {
+            $url = $protocol . $bucket . '.s3.amazonaws.com/' . $file;
+        }
     }
 
     return $url;
@@ -109,6 +118,10 @@ function s3_delete_attachment($url) {
     $file = str_replace($upload_dir['basedir'], '', $url);
     if (substr($file, 0, 1) == DIRECTORY_SEPARATOR) {
         $file = substr($file, 1);
+    }
+    
+    if (isset($settings['s3_bucket_path']) && $settings['s3_bucket_path']) {
+        $file = $settings['s3_bucket_path'] . '/' . $file;
     }
     
     if (isset($settings['valid']) && (int) $settings['valid']) {
@@ -138,6 +151,11 @@ function s3_image_make_intermediate_size($attachment_path) {
         $s3_path = substr($s3_path, 1);
     }
     $settings = json_decode(get_option('S3MS_settings'), true);
+    
+    if (isset($settings['s3_bucket_path']) && $settings['s3_bucket_path']) {
+        $s3_path = $settings['s3_bucket_path'] . '/' . $s3_path;
+    }
+    
     if (isset($settings['valid']) && (int) $settings['valid']) {
         if (!class_exists('S3')) {
             require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'S3.php';
@@ -179,6 +197,11 @@ function s3_update_attachment_metadata($data, $attachment_id) {
         $s3_path = substr($s3_path, 1);
     }
     $settings = json_decode(get_option('S3MS_settings'), true);
+    
+    if (isset($settings['s3_bucket_path']) && $settings['s3_bucket_path']) {
+        $s3_path = $settings['s3_bucket_path'] . '/' . $s3_path;
+    }
+    
     if (isset($settings['valid']) && (int) $settings['valid']) {
         if (!class_exists('S3')) {
             require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'S3.php';
@@ -204,6 +227,7 @@ function s3_update_attachment_metadata($data, $attachment_id) {
             // We store per file instead of always just referencing the settings, as if settings change we don't want to break previously
             // uploaded files that refer to different buckets/cloudfront/etc.
             update_post_meta($attachment_id, "S3MS_bucket", $settings['s3_bucket']);
+            update_post_meta($attachment_id, "S3MS_bucket_path", $settings['s3_bucket_path']);
             update_post_meta($attachment_id, "S3MS_file", $s3_path);
             update_post_meta($attachment_id, "S3MS_cloudfront", $settings['s3_cloudfront']);
             if ((isset($data['S3MS_move']) && $data['S3MS_move']) || (isset($settings['s3_delete_local']) && $settings['s3_delete_local'])) {

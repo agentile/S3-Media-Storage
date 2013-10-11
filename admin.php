@@ -51,6 +51,7 @@ function S3MSAdminContent() {
             // No errors!
             $settings = array(
                 's3_bucket' => trim($_POST['s3_bucket']),
+                's3_bucket_path' => isset($_POST['s3_bucket_path']) ? ltrim(rtrim(trim($_POST['s3_bucket_path']), '/') ,'/') : '',
                 's3_access_key' => trim($_POST['s3_access_key']),
                 's3_secret_key' => trim($_POST['s3_secret_key']),
                 's3_ssl' => isset($_POST['s3_ssl']) ? 1 : 0,
@@ -102,6 +103,11 @@ function S3MSAdminContent() {
     $s3_bucket = isset($_POST['s3_bucket']) ? trim($_POST['s3_bucket']) : null;
     if (!$s3_bucket && is_array($settings) && isset($settings['s3_bucket'])) {
         $s3_bucket = $settings['s3_bucket'];
+    }
+    
+    $s3_bucket_path = isset($_POST['s3_bucket_path']) ? trim($_POST['s3_bucket_path']) : null;
+    if (!$s3_bucket_path && is_array($settings) && isset($settings['s3_bucket_path'])) {
+        $s3_bucket_path = $settings['s3_bucket_path'];
     }
     
     $s3_access_key = isset($_POST['s3_access_key']) ? trim($_POST['s3_access_key']) : null;
@@ -159,6 +165,13 @@ function S3MSAdminContent() {
                             <th><label for="key"><?php _e("S3 Bucket Name:", 'S3MS' ); ?></label></th>
                             <td>
                                 <input style="width:300px;" type="text" name="s3_bucket" value="<?php echo $s3_bucket;?>" placeholder="Enter S3 Bucket Name e.g. media.myblog"/>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="key"><?php _e("S3 Bucket Path:", 'S3MS' ); ?></label></th>
+                            <td>
+                                <input style="width:300px;" type="text" name="s3_bucket_path" value="<?php echo $s3_bucket_path;?>" placeholder="Enter Additional S3 Bucket Path e.g. blog or blog/assets"/>
+                                <p class="description">If 'blog' is entered, uploads go to https://bucketname.s3.amazonaws.com/blog/YYYY/MM/file.ext </p>
                             </td>
                         </tr>
                         <tr>

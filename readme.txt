@@ -3,7 +3,7 @@ Contributors: Anthony Gentile
 Tags: S3, media, images
 Requires at least: 3.0
 Tested up to: 3.6
-Stable tag: 1.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 
 S3 Media Storage WordPress Plugin
@@ -29,6 +29,9 @@ uploaded file all in the same request.
 Upload the S3 Media Storage plugin to your blog, activate it, then enter your S3 details. Ensure that you have cURL PHP extension installed.
 
 == Changelog ==
+
+= 1.0.1 =
+* Allow for custom bucket paths
 
 = 1.0 =
 * Allowed for moving existing assets to S3 that were present before plugin installation.
