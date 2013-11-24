@@ -32,7 +32,7 @@
 * Amazon S3 PHP class
 *
 * @link http://undesigned.org.za/2007/10/22/amazon-s3-php-class
-* @version 0.5.0-dev
+* @version 0.5.1-dev
 */
 class S3
 {
@@ -120,8 +120,13 @@ class S3
 	 */
 	public static $useExceptions = false;
 
-	// SSL CURL SSL options - only needed if you are experiencing problems with your OpenSSL configuration
-	
+	/**
+	 * Time offset applied to time()
+	 * @access private
+	 * @static
+	 */
+	private static $__timeOffset = 0;
+
 	/**
 	 * SSL client key
 	 *
@@ -279,6 +284,30 @@ class S3
 
 
 	/**
+	* Set AWS time correction offset (use carefully)
+	*
+	* This can be used when an inaccurate system time is generating
+	* invalid request signatures.  It should only be used as a last
+	* resort when the system time cannot be changed.
+	*
+	* @param string $offset Time offset (set to zero to use AWS server time)
+	* @return void
+	*/
+	public static function setTimeCorrectionOffset($offset = 0)
+	{
+		if ($offset == 0)
+		{
+			$rest = new S3Request('HEAD');
+			$rest = $rest->getResponse();
+			$awstime = $rest->headers['date'];
+			$systime = time();			
+			$offset = $systime > $awstime ? -($systime - $awstime) : ($awstime - $systime);
+		}
+		self::$__timeOffset = $offset;
+	}
+
+
+	/**
 	* Set signing key
 	*
 	* @param string $keyPairId AWS Key Pair ID
@@ -352,7 +381,7 @@ class S3
 		{
 			if (isset($rest->body->Owner, $rest->body->Owner->ID, $rest->body->Owner->DisplayName))
 			$results['owner'] = array(
-				'id' => (string)$rest->body->Owner->ID, 'name' => (string)$rest->body->Owner->ID
+				'id' => (string)$rest->body->Owner->ID, 'name' => (string)$rest->body->Owner->DisplayName
 			);
 			$results['buckets'] = array();
 			foreach ($rest->body->Buckets->Bucket as $b)
@@ -623,7 +652,7 @@ class S3
 			if (isset($requestHeaders['Content-Type']))
 				$input['type'] =& $requestHeaders['Content-Type'];
 			elseif (isset($input['file']))
-				$input['type'] = self::__getMimeType($input['file']);
+				$input['type'] = self::__getMIMEType($input['file']);
 			else
 				$input['type'] = 'application/octet-stream';
 		}
@@ -1125,7 +1154,7 @@ class S3
 	*/
 	public static function getAuthenticatedURL($bucket, $uri, $lifetime, $hostBucket = false, $https = false)
 	{
-		$expires = time() + $lifetime;
+		$expires = self::__getTime() + $lifetime;
 		$uri = str_replace(array('%2F', '%2B'), array('/', '+'), rawurlencode($uri));
 		return sprintf(($https ? 'https' : 'http').'://%s/%s?AWSAccessKeyId=%s&Expires=%u&Signature=%s',
 		// $hostBucket ? $bucket : $bucket.'.s3.amazonaws.com', $uri, self::$__accessKey, $expires,
@@ -1168,7 +1197,7 @@ class S3
 		return self::getSignedPolicyURL(array(
 			'Statement' => array(
 				array('Resource' => $url, 'Condition' => array(
-					'DateLessThan' => array('AWS:EpochTime' => time() + $lifetime)
+					'DateLessThan' => array('AWS:EpochTime' => self::__getTime() + $lifetime)
 				))
 			)
 		));
@@ -1194,7 +1223,7 @@ class S3
 	{
 		// Create policy object
 		$policy = new stdClass;
-		$policy->expiration = gmdate('Y-m-d\TH:i:s\Z', (time() + $lifetime));
+		$policy->expiration = gmdate('Y-m-d\TH:i:s\Z', (self::__getTime() + $lifetime));
 		$policy->conditions = array();
 		$obj = new stdClass; $obj->bucket = $bucket; array_push($policy->conditions, $obj);
 		$obj = new stdClass; $obj->acl = $acl; array_push($policy->conditions, $obj);
@@ -1767,24 +1796,8 @@ class S3
 	* @param string &$file File path
 	* @return string
 	*/
-	private static function __getMimeType(&$file)
+	private static function __getMIMEType(&$file)
 	{
-		// Use fileinfo if available
-		if (extension_loaded('fileinfo') && isset($_ENV['MAGIC']) &&
-		($finfo = finfo_open(FILEINFO_MIME, $_ENV['MAGIC'])) !== false)
-		{
-			if (($type = finfo_file($finfo, $file)) !== false)
-			{
-				// Remove the charset and grab the last content-type
-				$type = explode(' ', str_replace('; charset=', ';charset=', $type));
-				$type = array_pop($type);
-				$type = explode(';', $type);
-				$type = trim(array_shift($type));
-			}
-			finfo_close($finfo);
-			if ($type !== false && strlen($type) > 0) return $type;
-		}
-
 		static $exts = array(
 			'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif',
 			'png' => 'image/png', 'ico' => 'image/x-icon', 'pdf' => 'application/pdf',
@@ -1802,11 +1815,39 @@ class S3
 			'avi' => 'video/x-msvideo', 'mpg' => 'video/mpeg', 'mpeg' => 'video/mpeg',
 			'mov' => 'video/quicktime', 'flv' => 'video/x-flv', 'php' => 'text/x-php'
 		);
-		$ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-		// mime_content_type() is deprecated, fileinfo should be configured
-		$type = isset($exts[$ext]) ? $exts[$ext] : trim(mime_content_type($file));
 
-		return ($type !== false && strlen($type) > 0) ? $type : 'application/octet-stream';
+		$ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+		if (isset($exts[$ext])) return $exts[$ext];
+
+		// Use fileinfo if available
+		if (extension_loaded('fileinfo') && isset($_ENV['MAGIC']) &&
+		($finfo = finfo_open(FILEINFO_MIME, $_ENV['MAGIC'])) !== false)
+		{
+			if (($type = finfo_file($finfo, $file)) !== false)
+			{
+				// Remove the charset and grab the last content-type
+				$type = explode(' ', str_replace('; charset=', ';charset=', $type));
+				$type = array_pop($type);
+				$type = explode(';', $type);
+				$type = trim(array_shift($type));
+			}
+			finfo_close($finfo);
+			if ($type !== false && strlen($type) > 0) return $type;
+		}
+
+		return 'application/octet-stream';
+	}
+
+
+	/**
+	* Get the current time
+	*
+	* @internal Used to apply offsets to sytem time
+	* @return integer
+	*/
+	public static function __getTime()
+	{
+		return time() + self::$__timeOffset;
 	}
 
 
@@ -2278,6 +2319,8 @@ final class S3Request
 			list($header, $value) = explode(': ', $data, 2);
 			if ($header == 'Last-Modified')
 				$this->response->headers['time'] = strtotime($value);
+			elseif ($header == 'Date')
+				$this->response->headers['date'] = strtotime($value);
 			elseif ($header == 'Content-Length')
 				$this->response->headers['size'] = (int)$value;
 			elseif ($header == 'Content-Type')
