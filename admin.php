@@ -3,82 +3,45 @@
  * ADMIN OPTIONS
  */
 function S3MSAdminMenu() {
-    add_options_page('S3 Media Storage', 'S3 Media Storage', '4', 'S3MSAdminMenu', 'S3MSAdminContent');
+    add_options_page('S3 Media Storage', 'S3 Media Storage', 's3ms-edit-files', 'S3MSAdminMenu', 'S3MSAdminContent');
 }
 
 add_action('admin_menu', 'S3MSAdminMenu');
 
-function S3MSAdminContent() {    
+function S3MSAdminContent() {
     if (isset($_POST['submit'])) {
         $errors = array();
-        
+
         if (!isset($_POST['s3_bucket']) || trim($_POST['s3_bucket']) == '') {
             $errors[] = "S3 Bucket Name Missing!";
         }
-        
+
         if (!isset($_POST['s3_access_key']) || trim($_POST['s3_access_key']) == '') {
             $errors[] = "S3 Access Key Missing!";
         }
-        
+
         if (!isset($_POST['s3_secret_key']) || trim($_POST['s3_secret_key']) == '') {
             $errors[] = "S3 Secret Key Missing!";
         }
-        
-        // If s3cmd is chosen, ensure it exists on the server.
-        if (isset($_POST['s3_transfer_method']) && $_POST['s3_transfer_method'] == 's3cmd') {
-            exec('which s3cmd', $exec_output);
-            if (!is_array($exec_output) || !isset($exec_output[0]) || !is_file($exec_output[0])) {
-                $errors[] = "s3cmd was not detected on your system. Please ensure it is installed.";
-            }
-            
-            // is config path valid.
-            if (!isset($_POST['s3_s3cmd_config']) || trim($_POST['s3_s3cmd_config']) == '' || !is_file($_POST['s3_s3cmd_config'])) {
-                $errors[] = "{$_POST['s3_s3cmd_config']} is not a valid file path!";
-            } 
-            
-            // is config path readable?
-            if (!isset($_POST['s3_s3cmd_config']) || trim($_POST['s3_s3cmd_config']) == '' || !is_readable($_POST['s3_s3cmd_config'])) {
-                $errors[] = "{$_POST['s3_s3cmd_config']} is not readable by the web server!";
-            } 
-        }
-        
-        // If AWS CLI is chosen, ensure it exists on the server.
-        if (isset($_POST['s3_transfer_method']) && $_POST['s3_transfer_method'] == 'awscli') {
-            exec('which aws', $exec_output);
-            if (!is_array($exec_output) || !isset($exec_output[0]) || !is_file($exec_output[0])) {
-                $errors[] = "AWS CLI was not detected on your system. Please ensure it is installed.";
-            }
-        }
-        
-        // If custom upload background is chosen, ensure it exists on the server.
-        if (isset($_POST['s3_transfer_method']) && $_POST['s3_transfer_method'] == 'background') {
-            if (!file_exists(dirname(__FILE__) . DIRECTORY_SEPARATOR . 's3-upload.php')) {
-                $errors[] = "Custom background script not found.";
-            }
 
-            if (!isset($_POST['s3_background_passphrase']) || trim($_POST['s3_background_passphrase']) == '') {
-                $errors[] = "Passphrase for background process cannot be blank!";
-            } 
-        }
-        
         $bucket = trim($_POST['s3_bucket']);
         $access_key = trim($_POST['s3_access_key']);
         $secret_key = trim($_POST['s3_secret_key']);
         $ssl = isset($_POST['s3_ssl']) ? 1 : 0;
-        
+
         // Test connectivity
         require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'S3.php';
         $s3 = new S3($access_key, $secret_key);
         $s3->setSSL((bool) $ssl);
         $s3->setExceptions(true);
-        
+
         try {
             $s3->getBucketLocation($bucket);
         } catch (Exception $e) {
             $errors[] = "Could not connect to bucket with the provided credentials!";
             $errors[] = $e->getMessage();
         }
-        
+
         if (!empty($errors)) {
             $msg = implode('<br/>', $errors);
             ?>
@@ -98,20 +61,18 @@ function S3MSAdminContent() {
                 's3_cloudfront' => trim($_POST['s3_cloudfront']),
                 's3_protocol' => in_array(trim($_POST['s3_protocol']), array('http','https','relative')) ? trim($_POST['s3_protocol']) : 'relative',
                 's3_transfer_method' => in_array(trim($_POST['s3_transfer_method']), array('s3class','s3cmd','awscli','background')) ? trim($_POST['s3_transfer_method']) : 's3class',
-                's3_s3cmd_config' => (isset($_POST['s3_s3cmd_config']) && trim($_POST['s3_s3cmd_config']) != '') ? trim($_POST['s3_s3cmd_config']) : null,
-                's3_background_passphrase' => (isset($_POST['s3_background_passphrase']) && trim($_POST['s3_background_passphrase']) != '') ? trim($_POST['s3_background_passphrase']) : null,
                 'valid' => 1,
             );
-            
+
             $settings = json_encode($settings);
             $ret = update_option('S3MS_settings', $settings);
-            
+
             ?>
             <div class="updated"><p><strong><?php _e('Settings Saved!', 'S3MS' ); ?></strong></p></div>
             <?php
         }
     }
-    
+
     if (isset($_POST['move_files']) || isset($_POST['copy_files'])) {
         $move = isset($_POST['move_files']) ? true : false;
         $label = isset($_POST['move_files']) ? 'Moved' : 'Copied';
@@ -119,7 +80,7 @@ function S3MSAdminContent() {
             $success_count = 0;
             $error_count = 0;
             foreach ($_POST['selected'] as $id) {
-                $ret = s3_update_attachment_metadata(array('S3MS_move' => $move), $id);
+                $ret = S3MS::updateAttachmentMetadata(array('S3MS_move' => $move), $id);
                 if ($ret) {
                     $success_count++;
                 } else {
@@ -136,77 +97,67 @@ function S3MSAdminContent() {
             }
         }
     }
-    
+
     // Get existing/POST options
     $settings = json_decode(get_option('S3MS_settings'), true);
-    
+
     $s3_bucket = isset($_POST['s3_bucket']) ? trim($_POST['s3_bucket']) : null;
     if (!$s3_bucket && is_array($settings) && isset($settings['s3_bucket'])) {
         $s3_bucket = $settings['s3_bucket'];
     }
-    
+
     $s3_bucket_path = isset($_POST['s3_bucket_path']) ? trim($_POST['s3_bucket_path']) : null;
     if (!$s3_bucket_path && is_array($settings) && isset($settings['s3_bucket_path'])) {
         $s3_bucket_path = $settings['s3_bucket_path'];
     }
-    
+
     $s3_access_key = isset($_POST['s3_access_key']) ? trim($_POST['s3_access_key']) : null;
     if (!$s3_access_key && is_array($settings) && isset($settings['s3_access_key'])) {
         $s3_access_key = $settings['s3_access_key'];
     }
-    
+
     $s3_secret_key = isset($_POST['s3_secret_key']) ? trim($_POST['s3_secret_key']) : null;
     if (!$s3_secret_key && is_array($settings) && isset($settings['s3_secret_key'])) {
         $s3_secret_key = $settings['s3_secret_key'];
     }
-    
+
     $s3_ssl = isset($_POST['s3_ssl']) ? (int) $_POST['s3_ssl'] : null;
     if (!$s3_ssl && is_array($settings) && isset($settings['s3_ssl'])) {
         $s3_ssl = (int) $settings['s3_ssl'];
     }
-    
+
     $s3_delete_local = isset($_POST['s3_delete_local']) ? (int) $_POST['s3_delete_local'] : null;
     if (!$s3_delete_local && is_array($settings) && isset($settings['s3_delete_local'])) {
         $s3_delete_local = (int) $settings['s3_delete_local'];
     }
-    
+
     $s3_delete = isset($_POST['s3_delete']) ? (int) $_POST['s3_delete'] : null;
     if (!$s3_delete && is_array($settings) && isset($settings['s3_delete'])) {
         $s3_delete = (int) $settings['s3_delete'];
     }
-    
+
     $s3_expires = isset($_POST['s3_expires']) ? trim($_POST['s3_expires']) : null;
     if (!$s3_expires && is_array($settings) && isset($settings['s3_expires'])) {
         $s3_expires = $settings['s3_expires'];
     }
-    
+
     $s3_cloudfront = isset($_POST['s3_cloudfront']) ? trim($_POST['s3_cloudfront']) : null;
     if (!$s3_cloudfront && is_array($settings) && isset($settings['s3_cloudfront'])) {
         $s3_cloudfront = $settings['s3_cloudfront'];
     }
-    
+
     $s3_protocol = isset($_POST['s3_protocol']) ? trim($_POST['s3_protocol']) : null;
     if (!$s3_protocol && is_array($settings) && isset($settings['s3_protocol'])) {
         $s3_protocol = $settings['s3_protocol'];
     }
-    
+
     $s3_transfer_method = isset($_POST['s3_transfer_method']) ? trim($_POST['s3_transfer_method']) : null;
     if (!$s3_transfer_method && is_array($settings) && isset($settings['s3_transfer_method'])) {
         $s3_transfer_method = $settings['s3_transfer_method'];
     }
-    
+
     if ($s3_transfer_method == null) {
         $s3_transfer_method = 's3class';
-    }
-    
-    $s3_s3cmd_config = isset($_POST['s3_s3cmd_config']) ? trim($_POST['s3_s3cmd_config']) : null;
-    if (!$s3_s3cmd_config && is_array($settings) && isset($settings['s3_s3cmd_config'])) {
-        $s3_s3cmd_config = $settings['s3_s3cmd_config'];
-    }
-    
-    $s3_background_passphrase = isset($_POST['s3_background_passphrase']) ? trim($_POST['s3_background_passphrase']) : null;
-    if (!$s3_background_passphrase && is_array($settings) && isset($settings['s3_background_passphrase'])) {
-        $s3_background_passphrase = $settings['s3_background_passphrase'];
     }
 ?>
 <div class="wrap">
@@ -217,7 +168,7 @@ function S3MSAdminContent() {
 		<h3><?php _e('Settings'); ?></h3>
             <div class="inside">
             <form id="S3MS-config" method="post" action="" enctype="multipart/form-data">
-                
+
                 <table class="form-table">
                     <tbody>
                         <tr>
@@ -288,22 +239,9 @@ function S3MSAdminContent() {
                                 <input type="radio" name="s3_protocol" value="relative" <?php echo ($s3_protocol == 'relative') ? 'checked="checked"' : '';?>/> Serve from same protocol as requested page.<br/>
                             </td>
                         </tr>
-                        <tr>
-                            <th><label for="key"><?php _e("Transfer Method:", 'S3MS' ); ?></label></th>
-                            <td>
-                                <input type="radio" name="s3_transfer_method" value="s3class" <?php echo ($s3_transfer_method == 's3class') ? 'checked="checked"' : '';?>/> Use <a href="http://undesigned.org.za/2007/10/22/amazon-s3-php-class" target="_blank">S3 PHP class</a> (default, packaged with plugin)<br/>
-                                <input type="radio" name="s3_transfer_method" value="s3cmd" <?php echo ($s3_transfer_method == 's3cmd') ? 'checked="checked"' : '';?>/> Use <a href="http://s3tools.org/s3cmd" target="_blank">s3cmd</a> (must be installed and configured on server, better for large files)<br/>
-                                <input style="width:400px;" type="text" name="s3_s3cmd_config" value="<?php echo $s3_s3cmd_config;?>" placeholder="Enter s3cmd .s3cfg file path"/>
-                                <p class="description">e.g. /home/username/.s3cfg<br/>Config file settings may supercede plugin settings. It is up to you to make sure your .s3cfg file matches the settings here.<br/> This field is required and the .s3cfg file must be readable by the web server.</p>
-                                <input type="radio" name="s3_transfer_method" value="awscli" <?php echo ($s3_transfer_method == 'awscli') ? 'checked="checked"' : '';?>/> Use <a href="http://aws.amazon.com/cli/" target="_blank">AWS CLI</a> (must be installed on server, better for large files)<br/>
-                                <input type="radio" name="s3_transfer_method" value="background" <?php echo ($s3_transfer_method == 'background') ? 'checked="checked"' : '';?>/> Use Background Script (c.f. s3-upload.php in plugin directory, better for large files)<br/>
-                                <input style="width:400px;" type="text" name="s3_background_passphrase" value="<?php echo $s3_background_passphrase;?>" placeholder="A secret passphrase to use"/>
-                                <p class="description">The background script will be initiated via HTTP(S) request. The passphrase ensures you made the request.</p>
-                            </td>
-                        </tr>
                     </tbody>
                 </table>
-                
+
                 <p class="submit">
                     <input type="submit" name="submit" id="submit" class="button button-primary" value="<?php _e('Save Changes');?>">
                 </p>
@@ -325,25 +263,25 @@ function S3MSAdminContent() {
                 $page = isset($_GET['s3ms_page']) ? (int) $_GET['s3ms_page'] : 1;
                 $limit = 100;
                 $offset = ($limit * $page) - $limit;
-                
+
                 $sql = "SELECT COUNT(1) as count
                         FROM {$wpdb->posts}
                         LEFT JOIN {$wpdb->postmeta} ON {$wpdb->postmeta}.post_id = {$wpdb->posts}.ID AND {$wpdb->postmeta}.meta_key = 'S3MS_file'
-                        WHERE 1=1 
-                            AND {$wpdb->posts}.post_type = 'attachment' 
+                        WHERE 1=1
+                            AND {$wpdb->posts}.post_type = 'attachment'
                             AND ({$wpdb->posts}.post_status = 'inherit')";
                 $r = $wpdb->get_row($sql);
                 $total = $r->count;
-                
+
                 $page_action = S3MS::paginationUrl();
                 $pages = ceil($total / $limit);
-                
+
                 $sql = "SELECT ID, guid, meta_key, meta_value
                         FROM {$wpdb->posts}
                         LEFT JOIN {$wpdb->postmeta} ON {$wpdb->postmeta}.post_id = {$wpdb->posts}.ID AND {$wpdb->postmeta}.meta_key = 'S3MS_file'
-                        WHERE 1=1 
-                            AND {$wpdb->posts}.post_type = 'attachment' 
-                            AND ({$wpdb->posts}.post_status = 'inherit') 
+                        WHERE 1=1
+                            AND {$wpdb->posts}.post_type = 'attachment'
+                            AND ({$wpdb->posts}.post_status = 'inherit')
                         ORDER BY {$wpdb->posts}.post_date DESC
                         LIMIT $offset,$limit";
                 $files = $wpdb->get_results($sql);
@@ -376,7 +314,7 @@ function S3MSAdminContent() {
                         <?php endforeach;?>
                     </tbody>
                 </table>
-                
+
                 <p class="submit">
                     <input type="submit" name="copy_files" class="button button-primary" value="<?php _e('Copy Files To S3');?>"> <input type="submit" name="move_files" class="button button-primary" value="<?php _e('Move Files To S3');?>">
                 </p>
