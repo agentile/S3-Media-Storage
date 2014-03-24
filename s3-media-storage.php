@@ -32,7 +32,7 @@ if ( !function_exists( 'add_action' ) ) {
 	exit;
 }
 
-define('S3MS_PLUGIN_VERSION', '1.0.2');
+define('S3MS_PLUGIN_VERSION', '1.0.3');
 define('S3MS_PLUGIN_URL', plugin_dir_url( __FILE__ ));
 
 register_activation_hook(__FILE__, array('S3MS', 'install'));
