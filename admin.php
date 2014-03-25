@@ -3,7 +3,7 @@
  * ADMIN OPTIONS
  */
 function S3MSAdminMenu() {
-    add_options_page('S3 Media Storage', 'S3 Media Storage', 's3ms-edit-files', 'S3MSAdminMenu', 'S3MSAdminContent');
+    add_options_page('S3 Media Storage', 'S3 Media Storage', 'manage_options', 'S3MSAdminMenu', 'S3MSAdminContent');
 }
 
 add_action('admin_menu', 'S3MSAdminMenu');
